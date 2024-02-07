@@ -14,16 +14,21 @@ tsvfile=${maindir}/derivatives/truenet-evaluate-mwsc/truenet-summary.tsv
 rm -rf $tsvfile
 touch $tsvfile
 echo -e "subject\twmh" >> $tsvfile
-for sub in 10317 10369 10402 10418; do
+for sub in `cat $scriptdir/sublist_all.txt`; do
+
+	# not needed, but just a reference
+	T1=$rf1datadir/bids/sub-${sub}/anat/sub-${sub}_T1w.nii.gz
 
 	# set directories
 	input=${maindir}/derivatives/truenet-preprocess/sub-${sub}
 	output=${maindir}/derivatives/truenet-evaluate-mwsc/sub-${sub}
 	mkdir -p $output
 
-	# evaluate model and print results to file
-	truenet evaluate -i $input -m mwsc -o $output
-	wmh=`fslstats $output/Predicted_probmap_truenet_sub-${sub}.nii.gz -l 0.5 -v | awk '{print $2}'`
-	echo -e "$sub\t$wmh" >> $tsvfile
+	# evaluate model and print results to file, only for existing data
+	if [ -e $T1 ]; then
+		truenet evaluate -i $input -m mwsc -o $output
+		wmh=`fslstats $output/Predicted_probmap_truenet_sub-${sub}.nii.gz -l 0.5 -v | awk '{print $2}'`
+		echo -e "$sub\t$wmh" >> $tsvfile
+	fi
 
 done
