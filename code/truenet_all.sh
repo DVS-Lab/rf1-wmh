@@ -14,7 +14,7 @@ tsvfile=${maindir}/derivatives/truenet-evaluate-mwsc/truenet-summary.tsv
 rm -rf $tsvfile
 touch $tsvfile
 echo -e "subject\twmh" >> $tsvfile
-for sub in 10317 10369; do
+for sub in 10317 10369 10402 10418; do
 
 	# set directories
 	input=${maindir}/derivatives/truenet/sub-${sub}
@@ -23,7 +23,7 @@ for sub in 10317 10369; do
 
 	# evaluate model and print results to file
 	truenet evaluate -i $input -m mwsc -o $output
-	wmh=$output/Predicted_probmap_truenet_sub-${sub}.nii.gz | awk '{print $2}'
+	wmh=`$output/Predicted_probmap_truenet_sub-${sub}.nii.gz | awk '{print $2}'`
 	echo -e "$sub\t$wmh" >> $tsvfile
 
 done
