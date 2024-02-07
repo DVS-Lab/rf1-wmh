@@ -23,7 +23,7 @@ for sub in 10317 10369 10402 10418; do
 
 	# evaluate model and print results to file
 	truenet evaluate -i $input -m mwsc -o $output
-	wmh=`$output/Predicted_probmap_truenet_sub-${sub}.nii.gz | awk '{print $2}'`
+	wmh=`fslstats $output/Predicted_probmap_truenet_sub-${sub}.nii.gz -l 0.5 -v | awk '{print $2}'`
 	echo -e "$sub\t$wmh" >> $tsvfile
 
 done
