@@ -17,7 +17,7 @@ echo -e "subject\twmh" >> $tsvfile
 for sub in 10317 10369 10402 10418; do
 
 	# set directories
-	input=${maindir}/derivatives/truenet/sub-${sub}
+	input=${maindir}/derivatives/truenet-preprocess/sub-${sub}
 	output=${maindir}/derivatives/truenet-evaluate-mwsc/sub-${sub}
 	mkdir -p $output
 
