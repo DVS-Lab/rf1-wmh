@@ -7,8 +7,8 @@
 output_dir="/ZPOOL/data/projects/rf1-wmh/derivatives/brainageR/"
 
 # Read each subject from the sublist file
-#for sub in `cat /ZPOOL/data/projects/sharedreward-aging/code/sublist-srndna.txt` ; do
-for sub in 107; do
+for sub in `cat /ZPOOL/data/projects/sharedreward-aging/code/sublist-srndna.txt` ; do
+#for sub in 107; do
   # Define the input path
   input_path="/ZPOOL/data/projects/rf1-wmh/derivatives/fmriprep/sub-${sub}_desc-preproc_T1w.nii"
   
