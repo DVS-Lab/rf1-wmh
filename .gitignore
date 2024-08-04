@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 
 # Large files
-/ZPOOL/data/projects/rf1-wmh/brainageR/software/*.rds
+brainageR/software/*.rds
 
 # C extensions
 *.so
