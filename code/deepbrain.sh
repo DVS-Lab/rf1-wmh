@@ -18,4 +18,4 @@ MODEL=/ZPOOL/data/tools/DeepBrainNet/Models/DeepBrainNet_VGG16.h5
 
 #python /ZPOOL/data/tools/DeepBrainNet/Script/Slicer.py $DATA_PATH ${mainoutput}/tmp/
 
-python /ZPOOL/data/tools/DeepBrainNet/Script/Model_Test.py ${mainoutput}/tmp/ ${OUT_PATH}pred.csv $MODEL
+python /ZPOOL/data/tools/DeepBrainNet/Script/Model_Test.py ${mainoutput}/tmp/ ${OUT_PATH}fulldataset.csv $MODEL
