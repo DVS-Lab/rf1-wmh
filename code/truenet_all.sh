@@ -8,7 +8,7 @@ maindir="$(dirname "$scriptdir")"
 export TRUENET_PRETRAINED_MODEL_PATH=$CONDA_PREFIX/data/truenet/models/
 
 # white-matter mask (in the same space as the probmaps you are using)
-WMmask=${scriptdir}/masks/avg152T1_white_bin.nii.gz
+WMmask=${maindir}/masks/avg152T1_white_bin.nii.gz
 
 if [ ! -e "$WMmask" ]; then
     echo "[WARN] White-matter mask not found at: $WMmask"
