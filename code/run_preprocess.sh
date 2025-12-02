@@ -8,7 +8,7 @@ maindir="$(dirname "$scriptdir")"
 paths_file=${scriptdir}/paths_FLAIR_n236.txt
 
 SCRIPTNAME=${scriptdir}/preprocess.sh
-NCORES=25
+NCORES=50
 
 # loop over each FLAIR path and extract the subject ID (e.g., 10317 from sub-10317_ses-01_FLAIR.nii.gz)
 while read -r FLAIR; do
