@@ -7,6 +7,14 @@ maindir="$(dirname "$scriptdir")"
 # need to ensure it can find these since my install was bad
 export TRUENET_PRETRAINED_MODEL_PATH=$CONDA_PREFIX/data/truenet/models/
 
+# white-matter mask (in the same space as the probmaps you are using)
+WMmask=${scriptdir}/masks/avg152T1_white_bin.nii.gz
+
+if [ ! -e "$WMmask" ]; then
+    echo "[WARN] White-matter mask not found at: $WMmask"
+    echo "       WM-masked volumes will be reported as NA."
+fi
+
 # base directory for rf1 project
 rf1datadir=/ZPOOL/data/projects/rf1-sra-linux2
 
@@ -21,8 +29,8 @@ tsvfile=${outroot}/truenet-summary.tsv
 rm -f "$tsvfile"
 touch "$tsvfile"
 
-# header: subject + both models
-echo -e "subject\tmwsc_vox\tmwsc_mm3\tukbb_vox\tukbb_mm3" >> "$tsvfile"
+# header: subject + both models (unmasked + WM-masked)
+echo -e "subject\tmwsc_vox\tmwsc_mm3\tmwsc_wm_vox\tmwsc_wm_mm3\tukbb_vox\tukbb_mm3\tukbb_wm_vox\tukbb_wm_mm3" >> "$tsvfile"
 
 # loop over FLAIR paths, derive subject IDs
 while read -r FLAIR; do
@@ -49,22 +57,37 @@ while read -r FLAIR; do
     # default NA values; helpful if something goes wrong for one model
     mwsc_vox="NA"
     mwsc_mm3="NA"
+    mwsc_wm_vox="NA"
+    mwsc_wm_mm3="NA"
+
     ukbb_vox="NA"
     ukbb_mm3="NA"
+    ukbb_wm_vox="NA"
+    ukbb_wm_mm3="NA"
 
     if [ -e "$T1" ] && [ -d "$input" ]; then
         echo "Running TrUE-Net (mwsc + ukbb) for sub-${sub} ..."
 
         # --- MWSC model ---
-        # You can add "-cp_type best" if you want best-checkpoint instead of last
         truenet evaluate -i "$input" -m mwsc -o "$out_mwsc"
 
         prob_mwsc=${out_mwsc}/Predicted_probmap_truenet_sub-${sub}.nii.gz
         if [ -e "$prob_mwsc" ]; then
-            # fslstats -v prints "num_voxels volume_mm3"
+            # Unmasked stats: voxels with prob > 0.5
             stats=$(fslstats "$prob_mwsc" -l 0.5 -v)
             mwsc_vox=$(echo "$stats" | awk '{print $1}')
             mwsc_mm3=$(echo "$stats" | awk '{print $2}')
+
+            # WM-masked stats (if mask exists)
+            if [ -e "$WMmask" ]; then
+                masked_mwsc=${out_mwsc}/Predicted_probmap_truenet_sub-${sub}_WMmasked.nii.gz
+                fslmaths "$prob_mwsc" -mas "$WMmask" "$masked_mwsc"
+                stats_wm=$(fslstats "$masked_mwsc" -l 0.5 -v)
+                mwsc_wm_vox=$(echo "$stats_wm" | awk '{print $1}')
+                mwsc_wm_mm3=$(echo "$stats_wm" | awk '{print $2}')
+            else
+                echo "  [WARN] WMmask not found; skipping WM-masked MWSC stats for sub-${sub}"
+            fi
         else
             echo "  [WARN] MWSC probmap missing for sub-${sub}"
         fi
@@ -74,9 +97,21 @@ while read -r FLAIR; do
 
         prob_ukbb=${out_ukbb}/Predicted_probmap_truenet_sub-${sub}.nii.gz
         if [ -e "$prob_ukbb" ]; then
+            # Unmasked stats
             stats=$(fslstats "$prob_ukbb" -l 0.5 -v)
             ukbb_vox=$(echo "$stats" | awk '{print $1}')
             ukbb_mm3=$(echo "$stats" | awk '{print $2}')
+
+            # WM-masked stats (if mask exists)
+            if [ -e "$WMmask" ]; then
+                masked_ukbb=${out_ukbb}/Predicted_probmap_truenet_sub-${sub}_WMmasked.nii.gz
+                fslmaths "$prob_ukbb" -mas "$WMmask" "$masked_ukbb"
+                stats_wm=$(fslstats "$masked_ukbb" -l 0.5 -v)
+                ukbb_wm_vox=$(echo "$stats_wm" | awk '{print $1}')
+                ukbb_wm_mm3=$(echo "$stats_wm" | awk '{print $2}')
+            else
+                echo "  [WARN] WMmask not found; skipping WM-masked UKBB stats for sub-${sub}"
+            fi
         else
             echo "  [WARN] UKBB probmap missing for sub-${sub}"
         fi
@@ -86,7 +121,6 @@ while read -r FLAIR; do
     fi
 
     # append to summary TSV (even if some fields are NA)
-    echo -e "${sub}\t${mwsc_vox}\t${mwsc_mm3}\t${ukbb_vox}\t${ukbb_mm3}" >> "$tsvfile"
+    echo -e "${sub}\t${mwsc_vox}\t${mwsc_mm3}\t${mwsc_wm_vox}\t${mwsc_wm_mm3}\t${ukbb_vox}\t${ukbb_mm3}\t${ukbb_wm_vox}\t${ukbb_wm_mm3}" >> "$tsvfile"
 
 done < "$paths_file"
-
