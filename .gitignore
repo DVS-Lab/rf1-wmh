@@ -145,4 +145,5 @@ derivatives/**/*.nii
 derivatives/*.nii
 derivatives/**/*.jpg
 derivatives/truenet-preprocess
+derivatives/truenet-evaluate/sub-*
 *.asv
