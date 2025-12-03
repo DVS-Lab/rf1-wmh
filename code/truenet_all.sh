@@ -7,12 +7,6 @@ maindir="$(dirname "$scriptdir")"
 # need to ensure it can find these since my install was bad
 export TRUENET_PRETRAINED_MODEL_PATH=$CONDA_PREFIX/data/truenet/models/
 
-# white-matter mask in MNI space (already binarized at your chosen threshold)
-WMmask=${maindir}/masks/avg152T1_white_bin.nii.gz
-if [ ! -e "$WMmask" ]; then
-    echo "[WARN] WM mask not found at $WMmask; WM-masked volumes will be NA."
-fi
-
 # base directory for rf1 project
 rf1datadir=/ZPOOL/data/projects/rf1-sra-linux2
 
@@ -52,7 +46,7 @@ while read -r FLAIR; do
     out_ukbb=${subjroot}/ukbb
     mkdir -p "$out_mwsc" "$out_ukbb"
 
-    # default NA values; helpful if something goes wrong for one model
+    # default NA values
     mwsc_vox="NA"
     mwsc_mm3="NA"
     mwsc_wm_vox="NA"
@@ -66,35 +60,29 @@ while read -r FLAIR; do
     if [ -e "$T1" ] && [ -d "$input" ]; then
         echo "Running TrUE-Net (mwsc + ukbb) for sub-${sub} ..."
 
+        # per-subject WM mask from preprocess dir (already binary)
+        subj_WMmask=${input}/sub-${sub}_WMmask.nii.gz
+        if [ ! -e "$subj_WMmask" ]; then
+            echo "  [WARN] No WMmask for sub-${sub}; WM-masked stats will be NA."
+        fi
+
         # --- MWSC model ---
         truenet evaluate -i "$input" -m mwsc -o "$out_mwsc"
 
         prob_mwsc=${out_mwsc}/Predicted_probmap_truenet_sub-${sub}.nii.gz
         if [ -e "$prob_mwsc" ]; then
-            # Unmasked stats: voxels with prob > 0.5
+            # Overall (unmasked) stats: voxels with prob > 0.5
             stats=$(fslstats "$prob_mwsc" -l 0.5 -v)
             mwsc_vox=$(echo "$stats" | awk '{print $1}')
             mwsc_mm3=$(echo "$stats" | awk '{print $2}')
 
-            # Reslice WM mask to probmap grid (once per subject) and get WM-masked stats
-            if [ -e "$WMmask" ]; then
-                subj_WMmask=${subjroot}/WMmask_likeTruenet_sub-${sub}.nii.gz
-                if [ ! -e "$subj_WMmask" ]; then
-                    # Use world-space alignment (MNI→MNI), nearest-neighbour to keep it binary
-                    flirt -in "$WMmask" \
-                          -ref "$prob_mwsc" \
-                          -applyxfm -usesqform \
-                          -interp nearestneighbour \
-                          -out "$subj_WMmask"
-                fi
-
+            # WM-restricted stats using subject WM mask
+            if [ -e "$subj_WMmask" ]; then
                 masked_mwsc=${out_mwsc}/Predicted_probmap_truenet_sub-${sub}_WMmasked.nii.gz
                 fslmaths "$prob_mwsc" -mas "$subj_WMmask" "$masked_mwsc"
                 stats_wm=$(fslstats "$masked_mwsc" -l 0.5 -v)
                 mwsc_wm_vox=$(echo "$stats_wm" | awk '{print $1}')
                 mwsc_wm_mm3=$(echo "$stats_wm" | awk '{print $2}')
-            else
-                echo "  [WARN] WMmask not found; skipping WM-masked MWSC stats for sub-${sub}"
             fi
         else
             echo "  [WARN] MWSC probmap missing for sub-${sub}"
@@ -105,20 +93,18 @@ while read -r FLAIR; do
 
         prob_ukbb=${out_ukbb}/Predicted_probmap_truenet_sub-${sub}.nii.gz
         if [ -e "$prob_ukbb" ]; then
-            # Unmasked stats
+            # Overall (unmasked) stats
             stats=$(fslstats "$prob_ukbb" -l 0.5 -v)
             ukbb_vox=$(echo "$stats" | awk '{print $1}')
             ukbb_mm3=$(echo "$stats" | awk '{print $2}')
 
-            # WM-masked stats using same resliced WM mask
+            # WM-restricted stats using subject WM mask
             if [ -e "$subj_WMmask" ]; then
                 masked_ukbb=${out_ukbb}/Predicted_probmap_truenet_sub-${sub}_WMmasked.nii.gz
                 fslmaths "$prob_ukbb" -mas "$subj_WMmask" "$masked_ukbb"
                 stats_wm=$(fslstats "$masked_ukbb" -l 0.5 -v)
                 ukbb_wm_vox=$(echo "$stats_wm" | awk '{print $1}')
                 ukbb_wm_mm3=$(echo "$stats_wm" | awk '{print $2}')
-            elif [ -e "$WMmask" ]; then
-                echo "  [WARN] subj_WMmask missing for sub-${sub} (MWSC must have failed earlier); skipping WM-masked UKBB stats."
             fi
         else
             echo "  [WARN] UKBB probmap missing for sub-${sub}"
