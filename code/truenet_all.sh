@@ -8,7 +8,7 @@ maindir="$(dirname "$scriptdir")"
 export TRUENET_PRETRAINED_MODEL_PATH=$CONDA_PREFIX/data/truenet/models/
 
 # white-matter mask in MNI space (already binarized at your chosen threshold)
-WMmask=${scriptdir}/masks/avg152T1_white_bin.nii.gz
+WMmask=${maindir}/masks/avg152T1_white_bin.nii.gz
 if [ ! -e "$WMmask" ]; then
     echo "[WARN] WM mask not found at $WMmask; WM-masked volumes will be NA."
 fi
@@ -17,7 +17,7 @@ fi
 rf1datadir=/ZPOOL/data/projects/rf1-sra-linux2
 
 # file with full FLAIR paths (n = 236)
-paths_file=${maindir}/paths_FLAIR_n236.txt
+paths_file=${scriptdir}/paths_FLAIR_n236.txt
 
 # where all TrUE-Net outputs + summary TSV will live
 outroot=${maindir}/derivatives/truenet-evaluate
