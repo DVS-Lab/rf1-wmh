@@ -10,8 +10,8 @@ export TRUENET_PRETRAINED_MODEL_PATH=$CONDA_PREFIX/data/truenet/models/
 # base directory for rf1 project
 rf1datadir=/ZPOOL/data/projects/rf1-sra-linux2
 
-# file with full FLAIR paths (n = 236)
-paths_file=${scriptdir}/paths_FLAIR_n236.txt
+# file with full FLAIR paths
+paths_file=${scriptdir}/paths_FLAIR_ses-1_n303.txt
 
 # where all TrUE-Net outputs + summary TSV will live
 outroot=${maindir}/derivatives/truenet-evaluate

@@ -11,7 +11,7 @@ sub=$1
 ses=01  # hard-code session for now
 
 # make output directory
-mainoutput=${maindir}/derivatives/truenet-preprocess/sub-${sub}
+mainoutput=${maindir}/derivatives/truenet-preprocess/sub-${sub}/ses-${ses}
 mkdir -p "$mainoutput"
 
 # ready inputs and outputs

@@ -4,8 +4,16 @@
 scriptdir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 maindir="$(dirname "$scriptdir")"
 
+
+# Notes from 2026-04-20 update
+# (base) tug87422@CLA19787:/ZPOOL/data/projects/rf1-sra-linux2$ ls -1 bids/sub-*/ses-01/anat/sub-*_ses-01_FLAIR.nii.gz | wc -l
+# 303
+# (base) tug87422@CLA19787:/ZPOOL/data/projects/rf1-sra-linux2$ ls -1 bids/sub-*/ses-02/anat/sub-*_ses-02_FLAIR.nii.gz | wc -l
+# 20
+
+
 # file with full FLAIR paths (n = 236)
-paths_file=${scriptdir}/paths_FLAIR_n236.txt
+paths_file=${scriptdir}/paths_FLAIR_ses-1_n303.txt
 
 SCRIPTNAME=${scriptdir}/preprocess.sh
 NCORES=50
