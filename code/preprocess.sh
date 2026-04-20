@@ -29,5 +29,5 @@ if [ -e "$T1" ] && [ -e "$FLAIR" ]; then
 fi
 
 
-ERROR: Could not find image /ZPOOL/data/projects/rf1-sra-linux2/bids/sub-10590/ses-02/anat/sub-10590_ses-02_T1w.nii.gz.nii.gz
-ERROR: Could not find image /ZPOOL/data/projects/rf1-sra-linux2/bids/sub-10617/ses-02/anat/sub-10617_ses-02_T1w.nii.gz.nii.gz
+# ERROR: Could not find image /ZPOOL/data/projects/rf1-sra-linux2/bids/sub-10590/ses-02/anat/sub-10590_ses-02_T1w.nii.gz.nii.gz
+# ERROR: Could not find image /ZPOOL/data/projects/rf1-sra-linux2/bids/sub-10617/ses-02/anat/sub-10617_ses-02_T1w.nii.gz.nii.gz
