@@ -8,7 +8,7 @@ maindir="$(dirname "$scriptdir")"
 rf1datadir=/ZPOOL/data/projects/rf1-sra-linux2
 
 sub=$1
-ses=01  # hard-code session for now
+ses=02  # hard-code session for now
 
 # make output directory
 mainoutput=${maindir}/derivatives/truenet-preprocess/sub-${sub}/ses-${ses}

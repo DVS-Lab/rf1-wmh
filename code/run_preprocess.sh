@@ -12,8 +12,8 @@ maindir="$(dirname "$scriptdir")"
 # 20
 
 
-# file with full FLAIR paths (n = 236)
-paths_file=${scriptdir}/paths_FLAIR_ses-1_n303.txt
+# file with full FLAIR paths
+paths_file=${scriptdir}/paths_FLAIR_ses-2_n20.txt
 
 SCRIPTNAME=${scriptdir}/preprocess.sh
 NCORES=50
