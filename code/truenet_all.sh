@@ -17,7 +17,9 @@ paths_file=${scriptdir}/paths_FLAIR_ses-1_n303.txt
 outroot=${maindir}/derivatives/truenet-evaluate
 mkdir -p "$outroot"
 
-tsvfile=${outroot}/truenet-summary.tsv
+ses=01  # hard-code session for now
+
+tsvfile=${outroot}/truenet-summary_ses-${ses}.tsv
 rm -f "$tsvfile"
 touch "$tsvfile"
 
@@ -32,13 +34,18 @@ while read -r FLAIR; do
     fname=$(basename "$FLAIR")
     sub_with_prefix=$(echo "$fname" | cut -d_ -f1)   # e.g., sub-10317
     sub=${sub_with_prefix#sub-}                      # e.g., 10317
-    ses=01
 
     # T1 path (for existence check)
-    T1=${rf1datadir}/bids/sub-${sub}/ses-${ses}/anat/sub-${sub}_ses-${ses}_T1w.nii.gz
+    if [[ $sub -eq 10590 || $sub -eq 10617 ]]; then # missing ses-02 T1w scans for these two for some reason
+        T1=${rf1datadir}/bids/sub-${sub}/ses-01/anat/sub-${sub}_ses-01_T1w.nii.gz
+        echo "using ses-01 T1w for sub-${sub}..."
+    else
+        T1=${rf1datadir}/bids/sub-${sub}/ses-${ses}/anat/sub-${sub}_ses-${ses}_T1w.nii.gz
+    fi
+
 
     # preprocessed input directory for this subject
-    input=${maindir}/derivatives/truenet-preprocess/sub-${sub}
+    input=${maindir}/derivatives/truenet-preprocess/sub-${sub}/ses-${ses}
 
     # subject-specific output dirs for each model
     subjroot=${outroot}/sub-${sub}
@@ -107,11 +114,11 @@ while read -r FLAIR; do
                 ukbb_wm_mm3=$(echo "$stats_wm" | awk '{print $2}')
             fi
         else
-            echo "  [WARN] UKBB probmap missing for sub-${sub}"
+            echo "  [WARN] UKBB probmap missing for sub-${sub}-ses-${ses}"
         fi
 
     else
-        echo "Skipping sub-${sub}: missing T1 or preprocessed directory."
+        echo "Skipping sub-${sub}-ses-${ses}: missing T1 or preprocessed directory."
     fi
 
     # append to summary TSV (even if some fields are NA)
