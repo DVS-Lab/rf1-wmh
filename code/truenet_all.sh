@@ -11,13 +11,13 @@ export TRUENET_PRETRAINED_MODEL_PATH=$CONDA_PREFIX/data/truenet/models/
 rf1datadir=/ZPOOL/data/projects/rf1-sra-linux2
 
 # file with full FLAIR paths
-paths_file=${scriptdir}/paths_FLAIR_ses-1_n303.txt
+paths_file=${scriptdir}/paths_FLAIR_ses-2_n20.txt
 
 # where all TrUE-Net outputs + summary TSV will live
 outroot=${maindir}/derivatives/truenet-evaluate
 mkdir -p "$outroot"
 
-ses=01  # hard-code session for now
+ses=02  # hard-code session for now
 
 tsvfile=${outroot}/truenet-summary_ses-${ses}.tsv
 rm -f "$tsvfile"
@@ -65,7 +65,7 @@ while read -r FLAIR; do
     ukbb_wm_mm3="NA"
 
     if [ -e "$T1" ] && [ -d "$input" ]; then
-        echo "Running TrUE-Net (mwsc + ukbb) for sub-${sub} ..."
+        echo "Running TrUE-Net (mwsc + ukbb) for sub-${sub}-ses-${ses} ..."
 
         # per-subject WM mask from preprocess dir (already binary)
         subj_WMmask=${input}/sub-${sub}_WMmask.nii.gz
