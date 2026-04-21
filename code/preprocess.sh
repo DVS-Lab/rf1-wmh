@@ -18,6 +18,7 @@ mkdir -p "$mainoutput"
 FLAIR=${rf1datadir}/bids/sub-${sub}/ses-${ses}/anat/sub-${sub}_ses-${ses}_FLAIR.nii.gz
 if [[ $sub -eq 10590 || $sub -eq 10617 ]]; then # missing ses-2 T1w scans for these two for some reason
     T1=${rf1datadir}/bids/sub-${sub}/ses-1/anat/sub-${sub}_ses-1_T1w.nii.gz
+    echo "using ses-1 T1w for sub-${sub}..."
 else
     T1=${rf1datadir}/bids/sub-${sub}/ses-${ses}/anat/sub-${sub}_ses-${ses}_T1w.nii.gz
 fi
