@@ -2,21 +2,31 @@
 
 # Normalize TrUE-Net WMH probability maps to FSL 1-mm MNI standard space.
 #
-# Assumptions:
-#   1. This script lives in your project code/ directory, so that
-#      maindir=$(dirname "$scriptdir") points to the project root.
-#   2. TrUE-Net was run from derivatives/truenet-preprocess and wrote outputs to
-#      derivatives/truenet-evaluate/sub-*/{ukbb,mwsc}, as in your existing scripts.
-#   3. The TrUE-Net probability map is in the same space/grid as the preprocessed
-#      FLAIR image for that subject/session.
+# Final simplified workflow:
+#   1. Read subjects from a TSV column named sub, subject, or participant_id.
+#   2. Use raw/native BIDS images from:
+#        /ZPOOL/data/projects/rf1-sra-linux2/bids/sub-${sub}/ses-${SES}/anat/
+#   3. Skull-strip working copies of the raw/native T1w and FLAIR images.
+#   4. Register raw/native FLAIR -> raw/native T1w with 6 DOF.
+#   5. Register raw/native T1w -> FSL 1-mm MNI with 12 DOF.
+#   6. Concatenate transforms and apply FLAIR -> MNI to the TrUE-Net WMH map.
+#   7. Write one continuous probability map and one p > 0.5 binary map.
+#   8. Merge each output type into 4-D files in the exact TSV row order.
 #
-# Usage:
-#   bash standardize_truenet_wmh_to_mni.sh /path/to/h1_doors.tsv
+# Expected TrUE-Net input probability map:
+#   ${TRUENET_EVALUATE_DIR}/sub-${sub}/${MODEL}/Predicted_probmap_truenet_sub-${sub}_WMmasked.nii.gz
 #
-# Useful overrides:
-#   SES=01 MODEL=ukbb PROB_KIND=WMmasked bash standardize_truenet_wmh_to_mni.sh h1_doors.tsv
-#   OVERWRITE=1 bash standardize_truenet_wmh_to_mni.sh h1_doors.tsv
-#   FAIL_ON_MISSING=0 bash standardize_truenet_wmh_to_mni.sh h1_doors.tsv
+# Typical usage from /ZPOOL/data/projects/rf1-wmh/code:
+#   bash standardize_truenet_wmh_to_mni_final.sh /path/to/h1_doors.tsv
+#
+# Common overrides:
+#   OVERWRITE=1 bash standardize_truenet_wmh_to_mni_final.sh /path/to/h1_doors.tsv
+#   MODEL=mwsc bash standardize_truenet_wmh_to_mni_final.sh /path/to/h1_doors.tsv
+#   PROB_KIND=unmasked bash standardize_truenet_wmh_to_mni_final.sh /path/to/h1_doors.tsv
+#   FAIL_ON_MISSING=0 bash standardize_truenet_wmh_to_mni_final.sh /path/to/h1_doors.tsv
+#
+# Registration tuning, if BET needs adjustment:
+#   BET_T1_OPTS="-R -f 0.30 -g 0" BET_FLAIR_OPTS="-R -f 0.30 -g 0" bash ...
 
 set -euo pipefail
 
@@ -24,17 +34,26 @@ scriptdir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 maindir="$(dirname "$scriptdir")"
 
 subject_tsv="${1:-${scriptdir}/h1_doors.tsv}"
-ses=01
-model="${MODEL:-ukbb}"                  # example: ukbb or mwsc
+
+# Defaults for this project. Override with environment variables if needed.
+ses="${SES:-01}"
+model="${MODEL:-ukbb}"                  # ukbb or mwsc
 prob_kind="${PROB_KIND:-WMmasked}"      # WMmasked or unmasked
 overwrite="${OVERWRITE:-0}"
 fail_on_missing="${FAIL_ON_MISSING:-1}"
 
-preprocess_dir="${TRUENET_PREPROCESS_DIR:-${maindir}/derivatives/truenet-preprocess}"
-evaluate_dir="${TRUENET_EVALUATE_DIR:-${maindir}/derivatives/truenet-evaluate}"
+bids_dir="${BIDS_DIR:-/ZPOOL/data/projects/rf1-sra-linux2/bids}"
+project_dir="${WMH_PROJECT_DIR:-$maindir}"
+evaluate_dir="${TRUENET_EVALUATE_DIR:-${project_dir}/derivatives/truenet-evaluate}"
+preprocess_dir="${TRUENET_PREPROCESS_DIR:-${project_dir}/derivatives/truenet-preprocess}"
+
 standard="${STANDARD:-${FSLDIR:-}/data/standard/MNI152_T1_1mm_brain.nii.gz}"
 space_tag="${SPACE_TAG:-MNI152NLin6Asym}"
 resolution_tag="${RESOLUTION_TAG:-1}"
+
+# Conservative BET defaults; adjust if QC suggests skull stripping is poor.
+bet_t1_opts="${BET_T1_OPTS:--R -f 0.30 -g 0}"
+bet_flair_opts="${BET_FLAIR_OPTS:--R -f 0.30 -g 0}"
 
 model_upper="$(echo "$model" | tr '[:lower:]' '[:upper:]')"
 case "$prob_kind" in
@@ -62,16 +81,22 @@ bin_list="${merge_dir}/group-h1doors_ses-${ses}_space-${space_tag}_res-${resolut
 merged_prob="${merge_dir}/group-h1doors_ses-${ses}_space-${space_tag}_res-${resolution_tag}_label-WMH_desc-${deriv_desc}_probseg.nii.gz"
 merged_bin="${merge_dir}/group-h1doors_ses-${ses}_space-${space_tag}_res-${resolution_tag}_label-WMH_desc-${deriv_desc}Pgt05_dseg.nii.gz"
 
-required_cmds=(flirt convert_xfm fslmaths fslmerge fslinfo)
+required_cmds=(flirt convert_xfm fslmaths fslmerge fslinfo bet awk)
 for cmd in "${required_cmds[@]}"; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
-        echo "[ERROR] Required FSL command not found on PATH: $cmd" >&2
+        echo "[ERROR] Required command not found on PATH: $cmd" >&2
         exit 1
     fi
 done
 
 if [[ ! -e "$subject_tsv" ]]; then
     echo "[ERROR] Subject TSV not found: $subject_tsv" >&2
+    exit 1
+fi
+
+if [[ ! -d "$bids_dir" ]]; then
+    echo "[ERROR] BIDS directory not found: $bids_dir" >&2
+    echo "        Set BIDS_DIR=/path/to/bids if needed." >&2
     exit 1
 fi
 
@@ -126,17 +151,27 @@ needs_run() {
     [[ "$overwrite" == "1" || ! -s "$outfile" ]]
 }
 
-check_probmap_matches_flair() {
+check_probmap_matches_raw_flair() {
     local prob="$1"
-    local flair="$2"
-    local prob_geom flair_geom
+    local raw_flair="$2"
+    local preproc_flair="$3"
+    local prob_geom raw_geom prep_geom
+
     prob_geom="$(get_geom "$prob")"
-    flair_geom="$(get_geom "$flair")"
-    if [[ "$prob_geom" != "$flair_geom" ]]; then
-        echo "  [WARN] Probmap geometry differs from preprocessed FLAIR."
-        echo "         prob : $prob_geom"
-        echo "         FLAIR: $flair_geom"
-        echo "         Continuing because the affine header may still encode the correct relationship."
+    raw_geom="$(get_geom "$raw_flair")"
+
+    if [[ "$prob_geom" != "$raw_geom" ]]; then
+        echo "  [WARN] Probmap dim/pixdim differs from raw/native BIDS FLAIR."
+        echo "         prob      : $prob_geom"
+        echo "         raw FLAIR : $raw_geom"
+        if [[ -e "$preproc_flair" ]]; then
+            prep_geom="$(get_geom "$preproc_flair")"
+            echo "         prep FLAIR: $prep_geom"
+            if [[ "$prob_geom" == "$prep_geom" ]]; then
+                echo "         Probmap matches the TrUE-Net preprocessed FLAIR dim/pixdim."
+            fi
+        fi
+        echo "         Continuing, but inspect this subject before trusting group maps."
     fi
 }
 
@@ -171,7 +206,7 @@ if [[ "${#subjects[@]}" -eq 0 ]]; then
 fi
 
 : > "$manifest"
-printf "row\tsubject\tstatus\tinput_probmap\tinput_flair\tinput_t1\tflair2std_mat\toutput_probseg\toutput_pgt05_dseg\tnote\n" >> "$manifest"
+printf "row\tsubject\tstatus\tinput_probmap\traw_flair\traw_t1w\tpreproc_flair_check\tflair2t1_mat\tt12std_mat\tflair2std_mat\toutput_probseg\toutput_pgt05_dseg\tnote\n" >> "$manifest"
 
 prob_files=()
 bin_files=()
@@ -180,6 +215,10 @@ row=0
 
 printf "Using subject TSV: %s\n" "$subject_tsv"
 printf "Subjects/rows found: %s\n" "${#subjects[@]}"
+printf "Session: %s\n" "$ses"
+printf "BIDS directory: %s\n" "$bids_dir"
+printf "WMH project directory: %s\n" "$project_dir"
+printf "TrUE-Net evaluate directory: %s\n" "$evaluate_dir"
 printf "Model: %s\n" "$model"
 printf "Input probability kind: %s\n" "$prob_kind"
 printf "Standard-space reference: %s\n" "$standard"
@@ -188,13 +227,10 @@ printf "Merge directory: %s\n\n" "$merge_dir"
 for sub in "${subjects[@]}"; do
     row=$((row + 1))
 
-    if [[ ! "$sub" =~ ^[0-9A-Za-z]+$ ]]; then
-        echo "[WARN] Row ${row}: subject value looks unusual: ${sub}"
-    fi
-
-    input_dir="${preprocess_dir}/sub-${sub}/ses-${ses}"
-    flair="${input_dir}/sub-${sub}_FLAIR.nii.gz"
-    t1="${input_dir}/sub-${sub}_T1.nii.gz"
+    raw_anat_dir="${bids_dir}/sub-${sub}/ses-${ses}/anat"
+    raw_flair="${raw_anat_dir}/sub-${sub}_ses-${ses}_FLAIR.nii.gz"
+    raw_t1="${raw_anat_dir}/sub-${sub}_ses-${ses}_T1w.nii.gz"
+    preproc_flair="${preprocess_dir}/sub-${sub}/ses-${ses}/sub-${sub}_FLAIR.nii.gz"
 
     model_dir="${evaluate_dir}/sub-${sub}/${model}"
     prob_in="${model_dir}/Predicted_probmap_truenet_sub-${sub}${prob_suffix}.nii.gz"
@@ -206,16 +242,20 @@ for sub in "${subjects[@]}"; do
     t12std="${xfm_dir}/sub-${sub}_ses-${ses}_from-T1w_to-${space_tag}_mode-image_xfm.mat"
     flair2std="${xfm_dir}/sub-${sub}_ses-${ses}_from-FLAIR_to-${space_tag}_mode-image_xfm.mat"
 
-    # QC images for checking registration. These are intentionally separate from the final WMH outputs.
-    flair_in_t1="${xfm_dir}/sub-${sub}_ses-${ses}_from-FLAIR_to-T1w_mode-image.nii.gz"
-    t1_in_std="${xfm_dir}/sub-${sub}_ses-${ses}_space-${space_tag}_res-${resolution_tag}_desc-T1w.nii.gz"
+    flair_copy="${xfm_dir}/sub-${sub}_ses-${ses}_desc-rawcopy_FLAIR.nii.gz"
+    t1_copy="${xfm_dir}/sub-${sub}_ses-${ses}_desc-rawcopy_T1w.nii.gz"
+    flair_brain="${xfm_dir}/sub-${sub}_ses-${ses}_desc-brain_FLAIR.nii.gz"
+    t1_brain="${xfm_dir}/sub-${sub}_ses-${ses}_desc-brain_T1w.nii.gz"
+
+    flair_in_t1="${xfm_dir}/sub-${sub}_ses-${ses}_from-FLAIR_to-T1w_desc-brain.nii.gz"
+    t1_in_std="${xfm_dir}/sub-${sub}_ses-${ses}_space-${space_tag}_res-${resolution_tag}_desc-brain_T1w.nii.gz"
     flair_in_std="${xfm_dir}/sub-${sub}_ses-${ses}_space-${space_tag}_res-${resolution_tag}_desc-FLAIR.nii.gz"
 
     out_prob="${model_dir}/sub-${sub}_ses-${ses}_space-${space_tag}_res-${resolution_tag}_label-WMH_desc-${deriv_desc}_probseg.nii.gz"
     out_bin="${model_dir}/sub-${sub}_ses-${ses}_space-${space_tag}_res-${resolution_tag}_label-WMH_desc-${deriv_desc}Pgt05_dseg.nii.gz"
 
     missing_note=""
-    for f in "$flair" "$t1" "$prob_in"; do
+    for f in "$raw_flair" "$raw_t1" "$prob_in"; do
         if [[ ! -e "$f" ]]; then
             missing_note+="missing ${f}; "
         fi
@@ -223,27 +263,51 @@ for sub in "${subjects[@]}"; do
 
     if [[ -n "$missing_note" ]]; then
         echo "[MISSING] Row ${row}, sub-${sub}: ${missing_note}"
-        printf "%s\tsub-%s\tmissing\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
-            "$row" "$sub" "$prob_in" "$flair" "$t1" "$flair2std" "$out_prob" "$out_bin" "$missing_note" >> "$manifest"
+        printf "%s\tsub-%s\tmissing\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+            "$row" "$sub" "$prob_in" "$raw_flair" "$raw_t1" "$preproc_flair" "$flair2t1" "$t12std" "$flair2std" "$out_prob" "$out_bin" "$missing_note" >> "$manifest"
         missing_count=$((missing_count + 1))
         continue
     fi
 
     echo "========================================"
     echo "Row ${row}: sub-${sub}"
-    echo "  input prob : $prob_in"
-    echo "  input FLAIR: $flair"
-    echo "  input T1   : $t1"
-    echo "  output prob: $out_prob"
-    echo "  output bin : $out_bin"
+    echo "  input prob       : $prob_in"
+    echo "  raw/native FLAIR : $raw_flair"
+    echo "  raw/native T1w   : $raw_t1"
+    echo "  output prob      : $out_prob"
+    echo "  output bin       : $out_bin"
 
-    check_probmap_matches_flair "$prob_in" "$flair"
+    check_probmap_matches_raw_flair "$prob_in" "$raw_flair" "$preproc_flair"
+
+    # Copy raw images into the transform/QC directory so BET outputs have stable names.
+    if needs_run "$flair_copy"; then
+        fslmaths "$raw_flair" "$flair_copy"
+    fi
+    if needs_run "$t1_copy"; then
+        fslmaths "$raw_t1" "$t1_copy"
+    fi
+
+    if needs_run "$t1_brain"; then
+        echo "  Skull-stripping raw/native T1w copy..."
+        # shellcheck disable=SC2086
+        bet "$t1_copy" "${t1_brain%.nii.gz}" $bet_t1_opts
+    else
+        echo "  Reusing skull-stripped T1w: $t1_brain"
+    fi
+
+    if needs_run "$flair_brain"; then
+        echo "  Skull-stripping raw/native FLAIR copy..."
+        # shellcheck disable=SC2086
+        bet "$flair_copy" "${flair_brain%.nii.gz}" $bet_flair_opts
+    else
+        echo "  Reusing skull-stripped FLAIR: $flair_brain"
+    fi
 
     if needs_run "$flair2std" || [[ ! -s "$flair2t1" || ! -s "$t12std" ]]; then
-        echo "  Estimating FLAIR -> T1 transform..."
+        echo "  Estimating raw/native FLAIR -> raw/native T1w transform, 6 DOF..."
         flirt \
-            -in "$flair" \
-            -ref "$t1" \
+            -in "$flair_brain" \
+            -ref "$t1_brain" \
             -out "$flair_in_t1" \
             -omat "$flair2t1" \
             -bins 256 \
@@ -254,9 +318,9 @@ for sub in "${subjects[@]}"; do
             -dof 6 \
             -interp trilinear
 
-        echo "  Estimating T1 -> ${space_tag} transform..."
+        echo "  Estimating raw/native T1w -> ${space_tag}, 12 DOF..."
         flirt \
-            -in "$t1" \
+            -in "$t1_brain" \
             -ref "$standard" \
             -out "$t1_in_std" \
             -omat "$t12std" \
@@ -268,12 +332,12 @@ for sub in "${subjects[@]}"; do
             -dof 12 \
             -interp trilinear
 
-        echo "  Concatenating FLAIR -> ${space_tag} transform..."
+        echo "  Concatenating raw/native FLAIR -> ${space_tag} transform..."
         convert_xfm -omat "$flair2std" -concat "$t12std" "$flair2t1"
 
-        echo "  Writing FLAIR-in-standard QC image..."
+        echo "  Writing raw/native FLAIR-in-standard QC image..."
         flirt \
-            -in "$flair" \
+            -in "$flair_copy" \
             -ref "$standard" \
             -applyxfm \
             -init "$flair2std" \
@@ -284,7 +348,7 @@ for sub in "${subjects[@]}"; do
     fi
 
     if needs_run "$out_prob"; then
-        echo "  Applying transform to probability map with trilinear interpolation..."
+        echo "  Applying FLAIR -> MNI transform to probability map with trilinear interpolation..."
         flirt \
             -in "$prob_in" \
             -ref "$standard" \
@@ -297,7 +361,7 @@ for sub in "${subjects[@]}"; do
     fi
 
     if needs_run "$out_bin"; then
-        echo "  Thresholding native probability map at p > 0.5, binarizing, then applying transform with nearest-neighbor interpolation..."
+        echo "  Thresholding native probability map at p > 0.5, binarizing, then transforming with nearest-neighbor interpolation..."
         tmpdir="$(mktemp -d)"
         native_bin="${tmpdir}/sub-${sub}_native_pgt05_bin.nii.gz"
         fslmaths "$prob_in" -thr 0.5000001 -bin "$native_bin"
@@ -317,8 +381,8 @@ for sub in "${subjects[@]}"; do
     prob_files+=("$out_prob")
     bin_files+=("$out_bin")
 
-    printf "%s\tsub-%s\tok\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
-        "$row" "$sub" "$prob_in" "$flair" "$t1" "$flair2std" "$out_prob" "$out_bin" "" >> "$manifest"
+    printf "%s\tsub-%s\tok\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+        "$row" "$sub" "$prob_in" "$raw_flair" "$raw_t1" "$preproc_flair" "$flair2t1" "$t12std" "$flair2std" "$out_prob" "$out_bin" "" >> "$manifest"
 done
 
 printf "\nFinished subject-level normalization.\n"
@@ -328,7 +392,7 @@ printf "Missing rows: %s\n" "$missing_count"
 if [[ "$missing_count" -gt 0 && "$fail_on_missing" == "1" ]]; then
     echo "[ERROR] At least one subject/row was missing required inputs."
     echo "        Refusing to create group 4-D files because the merged volumes would no longer match the full TSV row order."
-    echo "        Review the manifest above, fix missing files, or rerun with FAIL_ON_MISSING=0 to merge available outputs only."
+    echo "        Review the manifest, fix missing files, or rerun with FAIL_ON_MISSING=0 to merge available outputs only."
     exit 1
 fi
 
