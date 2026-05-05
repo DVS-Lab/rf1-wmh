@@ -14,7 +14,7 @@
 #   bash standardize_truenet_wmh_to_mni.sh /path/to/h1_doors.tsv
 #
 # Useful overrides:
-#   SES=02 MODEL=ukbb PROB_KIND=WMmasked bash standardize_truenet_wmh_to_mni.sh h1_doors.tsv
+#   SES=01 MODEL=ukbb PROB_KIND=WMmasked bash standardize_truenet_wmh_to_mni.sh h1_doors.tsv
 #   OVERWRITE=1 bash standardize_truenet_wmh_to_mni.sh h1_doors.tsv
 #   FAIL_ON_MISSING=0 bash standardize_truenet_wmh_to_mni.sh h1_doors.tsv
 
@@ -24,7 +24,7 @@ scriptdir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 maindir="$(dirname "$scriptdir")"
 
 subject_tsv="${1:-${scriptdir}/h1_doors.tsv}"
-ses="${SES:-02}"
+ses=01
 model="${MODEL:-ukbb}"                  # example: ukbb or mwsc
 prob_kind="${PROB_KIND:-WMmasked}"      # WMmasked or unmasked
 overwrite="${OVERWRITE:-0}"
