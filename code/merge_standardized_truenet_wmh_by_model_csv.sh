@@ -9,7 +9,7 @@
 # Default behavior:
 #   - Read df_model1.csv and df_model5.csv from this code directory.
 #   - Use the sub_id column to define the subject/volume order.
-#   - Merge the p > 0.5 binary standard-space WMH maps.
+#   - Merge the p(WMH) standard-space WMH maps (probseg).
 #   - For each merged 4-D file, create a 3-D mask of voxels with a nonzero
 #     value in any volume.
 #
@@ -35,8 +35,8 @@ maindir="$(dirname "$scriptdir")"
 ses="${SES:-01}"
 model="${MODEL:-ukbb}"                  # ukbb or mwsc
 prob_kind="${PROB_KIND:-WMmasked}"      # WMmasked or unmasked
-map_kind="${MAP_KIND:-dseg}"            # dseg, probseg, or both
-overwrite="${OVERWRITE:-0}"
+map_kind="${MAP_KIND:-probseg}"            # dseg, probseg, or both
+overwrite="${OVERWRITE:-1}"
 fail_on_missing="${FAIL_ON_MISSING:-1}"
 
 project_dir="${WMH_PROJECT_DIR:-$maindir}"
