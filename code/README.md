@@ -45,6 +45,7 @@ bash code/merge_standardized_truenet_wmh_by_model_csv.sh
 
 | File | Purpose |
 | --- | --- |
+| `correlate_wmh_summaries.py` | Compares DeepWMH native-space WMH volume against TrUE-Net summary volume columns, writing a matched-subject TSV and raw/log10 correlation table. |
 | `wmh_age_qc.m` | MATLAB QC script for chronological-age relationships with TrUE-Net WMH summary volumes. This is not a brain-age/BAG script. |
 | `Correlation_matrix.R` | Exploratory R script that reads `noddi-summary.csv`, selects numeric columns, computes a correlation matrix, and plots it with `corrplot`. |
 

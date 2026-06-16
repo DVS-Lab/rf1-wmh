@@ -172,6 +172,23 @@ By default that script reads:
 - `code/df_model1.csv`
 - `code/df_model5.csv`
 
+## Summary Correlations
+
+After DeepWMH and TrUE-Net have both been run for a session, compare the
+native-space WMH summary volumes:
+
+```bash
+python3 code/correlate_wmh_summaries.py --ses 02
+```
+
+By default this correlates `derivatives/deepwmh/deepwmh-summary_ses-02.tsv`
+against `derivatives/truenet-evaluate/truenet-summary_ses-02.tsv`, using the
+DeepWMH `mm3` column and all TrUE-Net `*_mm3` columns. Outputs are written to:
+
+```text
+derivatives/wmh-correlations/
+```
+
 ## Notes
 
 - `code/h1_doors.tsv`, `code/df_model1.csv`, and `code/df_model5.csv` are
