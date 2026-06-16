@@ -63,6 +63,7 @@ apptainer_mode="${DEEPWMH_APPTAINER_MODE:-run}"
 stop_on_failure="${STOP_ON_FAILURE:-1}"
 log_tail_lines="${LOG_TAIL_LINES:-80}"
 cleanenv="${APPTAINER_CLEANENV:-1}"
+container_path="/opt/ants-2.5.4/bin:/usr/local/bin:/usr/bin:/bin"
 
 if [[ -n "${APPTAINER_CMD:-}" ]]; then
     runtime="$APPTAINER_CMD"
@@ -147,6 +148,8 @@ build_runtime_args() {
     if [[ "$use_nv" == "1" ]]; then
         runtime_args+=(--nv)
     fi
+    runtime_args+=(--env "PATH=${container_path}")
+    runtime_args+=(--env "ROBEX_DIR=/opt/ROBEX")
     runtime_args+=(--bind "${bids_dir}:${bids_dir}")
     runtime_args+=(--bind "${maindir}:${maindir}")
 
@@ -315,6 +318,7 @@ echo "GPU           : $gpu"
 echo "MAX_JOBS      : $max_jobs"
 echo "Mode          : apptainer ${apptainer_mode}"
 echo "Clean env     : $cleanenv"
+echo "Container PATH: $container_path"
 echo
 
 runtime_args=()
