@@ -325,9 +325,9 @@ deps_log="${outroot}/logs/deepwmh-dependencies_ses-${ses}.log"
 echo "[CHECK] DeepWMH container dependencies"
 if {
     printf "Command: "
-    container_exec_command /bin/sh -lc "command -v DeepWMH_predict nnUNet_predict nnUNet_train N4BiasFieldCorrection"
+    container_exec_command /bin/sh -c "command -v DeepWMH_predict nnUNet_predict nnUNet_train N4BiasFieldCorrection"
     printf "\n"
-    container_exec /bin/sh -lc '
+    container_exec /bin/sh -c '
         missing=0
         echo "PATH=${PATH}"
         echo "ROBEX_DIR=${ROBEX_DIR:-}"
