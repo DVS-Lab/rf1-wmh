@@ -3,8 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Large files
-brainageR/software/*.rds
+# Decommissioned brain-age tooling and generated outputs
+brainageR/
+derivatives/brainageR/
+derivatives/deepbrain/
 
 # C extensions
 *.so

@@ -17,13 +17,13 @@
 #   ${TRUENET_EVALUATE_DIR}/sub-${sub}/${MODEL}/Predicted_probmap_truenet_sub-${sub}_WMmasked.nii.gz
 #
 # Typical usage from /ZPOOL/data/projects/rf1-wmh/code:
-#   bash standardize_truenet_wmh_to_mni_final.sh /path/to/h1_doors.tsv
+#   bash standardize_truenet_wmh_to_mni.sh /path/to/h1_doors.tsv
 #
 # Common overrides:
-#   OVERWRITE=1 bash standardize_truenet_wmh_to_mni_final.sh /path/to/h1_doors.tsv
-#   MODEL=mwsc bash standardize_truenet_wmh_to_mni_final.sh /path/to/h1_doors.tsv
-#   PROB_KIND=unmasked bash standardize_truenet_wmh_to_mni_final.sh /path/to/h1_doors.tsv
-#   FAIL_ON_MISSING=0 bash standardize_truenet_wmh_to_mni_final.sh /path/to/h1_doors.tsv
+#   OVERWRITE=1 bash standardize_truenet_wmh_to_mni.sh /path/to/h1_doors.tsv
+#   MODEL=mwsc bash standardize_truenet_wmh_to_mni.sh /path/to/h1_doors.tsv
+#   PROB_KIND=unmasked bash standardize_truenet_wmh_to_mni.sh /path/to/h1_doors.tsv
+#   FAIL_ON_MISSING=0 bash standardize_truenet_wmh_to_mni.sh /path/to/h1_doors.tsv
 #
 # Registration tuning, if BET needs adjustment:
 #   BET_T1_OPTS="-R -f 0.30 -g 0" BET_FLAIR_OPTS="-R -f 0.30 -g 0" bash ...
