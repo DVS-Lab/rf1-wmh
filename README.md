@@ -25,7 +25,22 @@ Useful overrides:
 DEEPWMH_GPU=1 bash code/deepwmh_all.sh 02
 DEEPWMH_SKIP_BFC=1 bash code/deepwmh_all.sh 02
 OVERWRITE=1 bash code/deepwmh_all.sh 02
+STOP_ON_FAILURE=0 bash code/deepwmh_all.sh 02
 bash code/deepwmh_all.sh 01 code/paths_FLAIR_ses-1_n303.txt
+```
+
+By default the script stops after the first failed subject and prints the last
+80 lines of that subject's log. Per-subject logs live in:
+
+```text
+derivatives/deepwmh/logs/
+```
+
+The script runs the SIF through `apptainer run` so it uses the image entrypoint.
+If needed, the older explicit-command behavior is available with:
+
+```bash
+DEEPWMH_APPTAINER_MODE=exec bash code/deepwmh_all.sh 02
 ```
 
 DeepWMH outputs are written to:

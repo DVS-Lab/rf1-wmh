@@ -13,6 +13,7 @@
 #   DEEPWMH_SKIP_BFC=1
 #   MAX_JOBS=1
 #   OVERWRITE=1
+#   STOP_ON_FAILURE=0
 
 set -euo pipefail
 
@@ -57,6 +58,9 @@ max_jobs="${MAX_JOBS:-1}"
 overwrite="${OVERWRITE:-0}"
 skip_bfc="${DEEPWMH_SKIP_BFC:-0}"
 use_nv="${DEEPWMH_USE_NV:-1}"
+apptainer_mode="${DEEPWMH_APPTAINER_MODE:-run}"
+stop_on_failure="${STOP_ON_FAILURE:-1}"
+log_tail_lines="${LOG_TAIL_LINES:-80}"
 
 if [[ -n "${APPTAINER_CMD:-}" ]]; then
     runtime="$APPTAINER_CMD"
@@ -84,6 +88,20 @@ if ! [[ "$max_jobs" =~ ^[0-9]+$ ]] || [[ "$max_jobs" -lt 1 ]]; then
     exit 1
 fi
 
+case "$apptainer_mode" in
+    run|exec)
+        ;;
+    *)
+        echo "[ERROR] DEEPWMH_APPTAINER_MODE must be run or exec." >&2
+        exit 1
+        ;;
+esac
+
+if ! [[ "$log_tail_lines" =~ ^[0-9]+$ ]] || [[ "$log_tail_lines" -lt 1 ]]; then
+    echo "[ERROR] LOG_TAIL_LINES must be at least 1." >&2
+    exit 1
+fi
+
 mkdir -p "$outroot" "${outroot}/logs"
 
 summary_tsv="${outroot}/deepwmh-summary_ses-${ses}.tsv"
@@ -102,6 +120,57 @@ stats_for_seg() {
         fslstats "$seg" -V | awk '{print $1 "\t" $2}'
     else
         printf "NA\tNA\n"
+    fi
+}
+
+print_log_tail() {
+    local log="$1"
+
+    if [[ -s "$log" ]]; then
+        echo "----- Last ${log_tail_lines} lines of ${log} -----" >&2
+        tail -n "$log_tail_lines" "$log" >&2
+        echo "----- End log tail -----" >&2
+    else
+        echo "[WARN] Log is empty or missing: $log" >&2
+    fi
+}
+
+build_runtime_args() {
+    local bind_path
+
+    runtime_args=()
+    if [[ "$use_nv" == "1" ]]; then
+        runtime_args+=(--nv)
+    fi
+    runtime_args+=(--bind "${bids_dir}:${bids_dir}")
+    runtime_args+=(--bind "${maindir}:${maindir}")
+
+    if [[ -n "${DEEPWMH_EXTRA_BINDS:-}" ]]; then
+        IFS=',' read -r -a extra_binds <<< "$DEEPWMH_EXTRA_BINDS"
+        for bind_path in "${extra_binds[@]}"; do
+            [[ -n "$bind_path" ]] && runtime_args+=(--bind "$bind_path")
+        done
+    fi
+}
+
+deepwmh_command() {
+    local -a cmd
+
+    if [[ "$apptainer_mode" == "run" ]]; then
+        cmd=("$runtime" run "${runtime_args[@]}" "$deepwmh_image" "$@")
+    else
+        cmd=("$runtime" exec "${runtime_args[@]}" "$deepwmh_image" DeepWMH_predict "$@")
+    fi
+
+    printf "%q " "${cmd[@]}"
+    printf "\n"
+}
+
+run_deepwmh() {
+    if [[ "$apptainer_mode" == "run" ]]; then
+        "$runtime" run "${runtime_args[@]}" "$deepwmh_image" "$@"
+    else
+        "$runtime" exec "${runtime_args[@]}" "$deepwmh_image" DeepWMH_predict "$@"
     fi
 }
 
@@ -138,9 +207,7 @@ append_summary() {
 run_one() {
     local flair="$1"
     local fname sub_with_prefix sub this_ses case_name subjroot log seg vox mm3 status note
-    local bind_path
-    local -a runtime_args deepwmh_args
-    local -a extra_binds
+    local -a deepwmh_args
 
     [[ -z "$flair" ]] && return 0
 
@@ -169,22 +236,7 @@ run_one() {
         return 0
     fi
 
-    runtime_args=()
-    if [[ "$use_nv" == "1" ]]; then
-        runtime_args+=(--nv)
-    fi
-    runtime_args+=(--bind "${bids_dir}:${bids_dir}")
-    runtime_args+=(--bind "${maindir}:${maindir}")
-
-    if [[ -n "${DEEPWMH_EXTRA_BINDS:-}" ]]; then
-        IFS=',' read -r -a extra_binds <<< "$DEEPWMH_EXTRA_BINDS"
-        for bind_path in "${extra_binds[@]}"; do
-            [[ -n "$bind_path" ]] && runtime_args+=(--bind "$bind_path")
-        done
-    fi
-
     deepwmh_args=(
-        DeepWMH_predict
         -i "$flair"
         -n "$case_name"
         -m /model
@@ -196,7 +248,12 @@ run_one() {
     fi
 
     echo "[RUN] ${case_name}"
-    if "$runtime" exec "${runtime_args[@]}" "$deepwmh_image" "${deepwmh_args[@]}" > "$log" 2>&1; then
+    if {
+        printf "Command: "
+        deepwmh_command "${deepwmh_args[@]}"
+        printf "\n"
+        run_deepwmh "${deepwmh_args[@]}"
+    } > "$log" 2>&1; then
         if [[ -s "$seg" ]]; then
             read -r vox mm3 <<< "$(stats_for_seg "$seg")"
             status="ok"
@@ -216,6 +273,14 @@ run_one() {
 
     append_summary "$sub" "$this_ses" "$status" "$flair" "$seg" "$vox" "$mm3" "$log" "$note"
     echo "[${status^^}] ${case_name}"
+
+    if [[ "$status" == "failed" ]]; then
+        print_log_tail "$log"
+        if [[ "$stop_on_failure" == "1" ]]; then
+            echo "[ERROR] Stopping after first failed DeepWMH subject. Set STOP_ON_FAILURE=0 to continue through the path list." >&2
+            exit 1
+        fi
+    fi
 }
 
 wait_for_slot() {
@@ -231,6 +296,27 @@ echo "Output root   : $outroot"
 echo "Summary TSV   : $summary_tsv"
 echo "GPU           : $gpu"
 echo "MAX_JOBS      : $max_jobs"
+echo "Mode          : apptainer ${apptainer_mode}"
+echo
+
+runtime_args=()
+extra_binds=()
+build_runtime_args
+
+preflight_log="${outroot}/logs/deepwmh-preflight_ses-${ses}.log"
+echo "[CHECK] DeepWMH command help"
+if {
+    printf "Command: "
+    deepwmh_command -h
+    printf "\n"
+    run_deepwmh -h
+} > "$preflight_log" 2>&1; then
+    echo "[OK] DeepWMH command is callable"
+else
+    echo "[FAILED] DeepWMH command preflight failed" >&2
+    print_log_tail "$preflight_log"
+    exit 1
+fi
 echo
 
 while IFS= read -r flair; do
