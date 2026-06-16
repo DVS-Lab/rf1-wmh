@@ -59,7 +59,6 @@ max_jobs="${MAX_JOBS:-1}"
 overwrite="${OVERWRITE:-0}"
 skip_bfc="${DEEPWMH_SKIP_BFC:-0}"
 use_nv="${DEEPWMH_USE_NV:-1}"
-apptainer_mode="${DEEPWMH_APPTAINER_MODE:-run}"
 stop_on_failure="${STOP_ON_FAILURE:-1}"
 log_tail_lines="${LOG_TAIL_LINES:-80}"
 cleanenv="${APPTAINER_CLEANENV:-1}"
@@ -90,15 +89,6 @@ if ! [[ "$max_jobs" =~ ^[0-9]+$ ]] || [[ "$max_jobs" -lt 1 ]]; then
     echo "[ERROR] MAX_JOBS must be at least 1." >&2
     exit 1
 fi
-
-case "$apptainer_mode" in
-    run|exec)
-        ;;
-    *)
-        echo "[ERROR] DEEPWMH_APPTAINER_MODE must be run or exec." >&2
-        exit 1
-        ;;
-esac
 
 if ! [[ "$log_tail_lines" =~ ^[0-9]+$ ]] || [[ "$log_tail_lines" -lt 1 ]]; then
     echo "[ERROR] LOG_TAIL_LINES must be at least 1." >&2
@@ -148,8 +138,6 @@ build_runtime_args() {
     if [[ "$use_nv" == "1" ]]; then
         runtime_args+=(--nv)
     fi
-    runtime_args+=(--env "PATH=${container_path}")
-    runtime_args+=(--env "ROBEX_DIR=/opt/ROBEX")
     runtime_args+=(--bind "${bids_dir}:${bids_dir}")
     runtime_args+=(--bind "${maindir}:${maindir}")
 
@@ -164,34 +152,26 @@ build_runtime_args() {
 deepwmh_command() {
     local -a cmd
 
-    if [[ "$apptainer_mode" == "run" ]]; then
-        cmd=("$runtime" run "${runtime_args[@]}" "$deepwmh_image" "$@")
-    else
-        cmd=("$runtime" exec "${runtime_args[@]}" "$deepwmh_image" DeepWMH_predict "$@")
-    fi
+    cmd=("$runtime" exec "${runtime_args[@]}" "$deepwmh_image" /usr/bin/env "PATH=${container_path}" "ROBEX_DIR=/opt/ROBEX" DeepWMH_predict "$@")
 
     printf "%q " "${cmd[@]}"
     printf "\n"
 }
 
 run_deepwmh() {
-    if [[ "$apptainer_mode" == "run" ]]; then
-        "$runtime" run "${runtime_args[@]}" "$deepwmh_image" "$@"
-    else
-        "$runtime" exec "${runtime_args[@]}" "$deepwmh_image" DeepWMH_predict "$@"
-    fi
+    "$runtime" exec "${runtime_args[@]}" "$deepwmh_image" /usr/bin/env "PATH=${container_path}" "ROBEX_DIR=/opt/ROBEX" DeepWMH_predict "$@"
 }
 
 container_exec_command() {
     local -a cmd
 
-    cmd=("$runtime" exec "${runtime_args[@]}" "$deepwmh_image" "$@")
+    cmd=("$runtime" exec "${runtime_args[@]}" "$deepwmh_image" /usr/bin/env "PATH=${container_path}" "ROBEX_DIR=/opt/ROBEX" "$@")
     printf "%q " "${cmd[@]}"
     printf "\n"
 }
 
 container_exec() {
-    "$runtime" exec "${runtime_args[@]}" "$deepwmh_image" "$@"
+    "$runtime" exec "${runtime_args[@]}" "$deepwmh_image" /usr/bin/env "PATH=${container_path}" "ROBEX_DIR=/opt/ROBEX" "$@"
 }
 
 extract_session() {
@@ -316,7 +296,7 @@ echo "Output root   : $outroot"
 echo "Summary TSV   : $summary_tsv"
 echo "GPU           : $gpu"
 echo "MAX_JOBS      : $max_jobs"
-echo "Mode          : apptainer ${apptainer_mode}"
+echo "Mode          : apptainer exec"
 echo "Clean env     : $cleanenv"
 echo "Container PATH: $container_path"
 echo

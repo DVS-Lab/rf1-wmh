@@ -38,12 +38,9 @@ the last 80 lines of the relevant log. Per-subject and preflight logs live in:
 derivatives/deepwmh/logs/
 ```
 
-The script runs the SIF through `apptainer run` so it uses the image entrypoint.
-If needed, the older explicit-command behavior is available with:
-
-```bash
-DEEPWMH_APPTAINER_MODE=exec bash code/deepwmh_all.sh 02
-```
+The script invokes `DeepWMH_predict` explicitly through `apptainer exec` and
+sets the container `PATH` so ANTs commands such as `N4BiasFieldCorrection` are
+visible inside the clean Apptainer environment.
 
 DeepWMH outputs are written to:
 
