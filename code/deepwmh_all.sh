@@ -14,6 +14,7 @@
 #   MAX_JOBS=1
 #   OVERWRITE=1
 #   STOP_ON_FAILURE=0
+#   APPTAINER_CLEANENV=0
 
 set -euo pipefail
 
@@ -61,6 +62,7 @@ use_nv="${DEEPWMH_USE_NV:-1}"
 apptainer_mode="${DEEPWMH_APPTAINER_MODE:-run}"
 stop_on_failure="${STOP_ON_FAILURE:-1}"
 log_tail_lines="${LOG_TAIL_LINES:-80}"
+cleanenv="${APPTAINER_CLEANENV:-1}"
 
 if [[ -n "${APPTAINER_CMD:-}" ]]; then
     runtime="$APPTAINER_CMD"
@@ -139,6 +141,9 @@ build_runtime_args() {
     local bind_path
 
     runtime_args=()
+    if [[ "$cleanenv" == "1" ]]; then
+        runtime_args+=(--cleanenv)
+    fi
     if [[ "$use_nv" == "1" ]]; then
         runtime_args+=(--nv)
     fi
@@ -172,6 +177,18 @@ run_deepwmh() {
     else
         "$runtime" exec "${runtime_args[@]}" "$deepwmh_image" DeepWMH_predict "$@"
     fi
+}
+
+container_exec_command() {
+    local -a cmd
+
+    cmd=("$runtime" exec "${runtime_args[@]}" "$deepwmh_image" "$@")
+    printf "%q " "${cmd[@]}"
+    printf "\n"
+}
+
+container_exec() {
+    "$runtime" exec "${runtime_args[@]}" "$deepwmh_image" "$@"
 }
 
 extract_session() {
@@ -297,6 +314,7 @@ echo "Summary TSV   : $summary_tsv"
 echo "GPU           : $gpu"
 echo "MAX_JOBS      : $max_jobs"
 echo "Mode          : apptainer ${apptainer_mode}"
+echo "Clean env     : $cleanenv"
 echo
 
 runtime_args=()
@@ -315,6 +333,64 @@ if {
 else
     echo "[FAILED] DeepWMH command preflight failed" >&2
     print_log_tail "$preflight_log"
+    exit 1
+fi
+echo
+
+deps_log="${outroot}/logs/deepwmh-dependencies_ses-${ses}.log"
+echo "[CHECK] DeepWMH container dependencies"
+if {
+    printf "Command: "
+    container_exec_command /bin/sh -lc "command -v DeepWMH_predict nnUNet_predict nnUNet_train N4BiasFieldCorrection"
+    printf "\n"
+    container_exec /bin/sh -lc '
+        missing=0
+        echo "PATH=${PATH}"
+        echo "ROBEX_DIR=${ROBEX_DIR:-}"
+        for cmd in DeepWMH_predict nnUNet_predict nnUNet_train N4BiasFieldCorrection; do
+            if command -v "$cmd" >/dev/null 2>&1; then
+                printf "[OK] %s -> %s\n" "$cmd" "$(command -v "$cmd")"
+            else
+                printf "[MISSING] %s\n" "$cmd"
+                missing=1
+            fi
+        done
+
+        if python3 -m pip show nnunet >/dev/null 2>&1; then
+            python3 -m pip show nnunet | sed -n "1,6p"
+        else
+            echo "[MISSING] python package: nnunet"
+            missing=1
+        fi
+
+        if python3 -m pip show deepwmh >/dev/null 2>&1; then
+            python3 -m pip show deepwmh | sed -n "1,6p"
+        else
+            echo "[MISSING] python package: deepwmh"
+            missing=1
+        fi
+
+        if [ -x "${ROBEX_DIR:-/opt/ROBEX}/runROBEX.sh" ]; then
+            echo "[OK] ROBEX run script: ${ROBEX_DIR:-/opt/ROBEX}/runROBEX.sh"
+        else
+            echo "[MISSING] ROBEX run script under ROBEX_DIR"
+            missing=1
+        fi
+
+        if [ -d /model/nnUNet ]; then
+            echo "[OK] installed model directory: /model/nnUNet"
+        else
+            echo "[MISSING] installed model directory: /model/nnUNet"
+            missing=1
+        fi
+
+        exit "$missing"
+    '
+} > "$deps_log" 2>&1; then
+    echo "[OK] DeepWMH container dependencies are present"
+else
+    echo "[FAILED] DeepWMH container dependency preflight failed" >&2
+    print_log_tail "$deps_log"
     exit 1
 fi
 echo

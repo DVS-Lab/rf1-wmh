@@ -26,11 +26,13 @@ DEEPWMH_GPU=1 bash code/deepwmh_all.sh 02
 DEEPWMH_SKIP_BFC=1 bash code/deepwmh_all.sh 02
 OVERWRITE=1 bash code/deepwmh_all.sh 02
 STOP_ON_FAILURE=0 bash code/deepwmh_all.sh 02
+APPTAINER_CLEANENV=0 bash code/deepwmh_all.sh 02
 bash code/deepwmh_all.sh 01 code/paths_FLAIR_ses-1_n303.txt
 ```
 
-By default the script stops after the first failed subject and prints the last
-80 lines of that subject's log. Per-subject logs live in:
+By default the script uses `apptainer --cleanenv`, runs container dependency
+checks before the subject loop, stops after the first failed subject, and prints
+the last 80 lines of the relevant log. Per-subject and preflight logs live in:
 
 ```text
 derivatives/deepwmh/logs/
