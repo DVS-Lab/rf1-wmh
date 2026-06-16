@@ -15,6 +15,7 @@
 #   OVERWRITE=1
 #   STOP_ON_FAILURE=0
 #   APPTAINER_CLEANENV=0
+#   DEEPWMH_WRITABLE_TMPFS=0
 
 set -euo pipefail
 
@@ -62,6 +63,7 @@ use_nv="${DEEPWMH_USE_NV:-1}"
 stop_on_failure="${STOP_ON_FAILURE:-1}"
 log_tail_lines="${LOG_TAIL_LINES:-80}"
 cleanenv="${APPTAINER_CLEANENV:-1}"
+writable_tmpfs="${DEEPWMH_WRITABLE_TMPFS:-1}"
 container_path="/opt/ants-2.5.4/bin:/usr/local/bin:/usr/bin:/bin"
 
 if [[ -n "${APPTAINER_CMD:-}" ]]; then
@@ -137,6 +139,9 @@ build_runtime_args() {
     fi
     if [[ "$use_nv" == "1" ]]; then
         runtime_args+=(--nv)
+    fi
+    if [[ "$writable_tmpfs" == "1" ]]; then
+        runtime_args+=(--writable-tmpfs)
     fi
     runtime_args+=(--bind "${bids_dir}:${bids_dir}")
     runtime_args+=(--bind "${maindir}:${maindir}")
@@ -298,6 +303,7 @@ echo "GPU           : $gpu"
 echo "MAX_JOBS      : $max_jobs"
 echo "Mode          : apptainer exec"
 echo "Clean env     : $cleanenv"
+echo "Writable tmpfs: $writable_tmpfs"
 echo "Container PATH: $container_path"
 echo
 
@@ -365,6 +371,14 @@ if {
             echo "[OK] installed model directory: /model/nnUNet"
         else
             echo "[MISSING] installed model directory: /model/nnUNet"
+            missing=1
+        fi
+
+        if touch /model/.deepwmh_write_test 2>/dev/null; then
+            rm -f /model/.deepwmh_write_test
+            echo "[OK] /model is writable"
+        else
+            echo "[MISSING] /model is not writable"
             missing=1
         fi
 
